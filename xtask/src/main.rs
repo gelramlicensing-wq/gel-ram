@@ -5,6 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 const ALLOWED_EXTENSIONS: &[&str] = &["rs", "md", "toml", "yml", "txt", "gel"];
 const ALLOWED_EXTENSIONLESS: &[&str] = &[
     "Cargo.lock",
@@ -25,7 +28,9 @@ const CLA_ACK_TICKED: &[&str] = &[
     "[X] I have completed the GEL RAM CLA privately with the project before opening this pull request.",
 ];
 
-const USAGE: &str = "verify|rust-only|licensing|docs-refs|cla-ack|fmt|clippy|test|bench|physics";
+const USAGE: &str =
+    "verify|rust-only|licensing|ci-policy|docs-refs|cla-ack|fmt|clippy|test|bench|physics";
+const CHECKOUT_SHA: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
 const FMT_CHECK_ARGS: &[&str] = &["fmt", "--all", "--", "--check"];
 const CLIPPY_ARGS: &[&str] = &[
     "clippy",
@@ -55,7 +60,10 @@ fn walk(root: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
         {
             continue;
         }
-        if path.is_dir() {
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() {
+            out.push(path);
+        } else if metadata.is_dir() {
             walk(&path, out)?;
         } else {
             out.push(path);
@@ -70,12 +78,24 @@ fn workspace_root() -> Result<&'static Path, String> {
         .ok_or_else(|| "missing workspace root".into())
 }
 
-fn rust_only() -> Result<(), String> {
-    let root = workspace_root()?;
+fn rust_only_at(root: &Path) -> Result<(), String> {
     let mut files = Vec::new();
     walk(root, &mut files).map_err(|e| e.to_string())?;
     let mut bad = Vec::new();
     for path in files {
+        let metadata = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            bad.push(format!("symlink is not allowed: {}", path.display()));
+            continue;
+        }
+        #[cfg(unix)]
+        if metadata.permissions().mode() & 0o111 != 0 {
+            bad.push(format!(
+                "executable file is not allowed in the release tree: {}",
+                path.display()
+            ));
+            continue;
+        }
         let allowed = path
             .extension()
             .and_then(|x| x.to_str())
@@ -85,7 +105,10 @@ fn rust_only() -> Result<(), String> {
                 .and_then(|x| x.to_str())
                 .is_some_and(|name| ALLOWED_EXTENSIONLESS.contains(&name));
         if !allowed {
-            bad.push(path);
+            bad.push(format!(
+                "file type is outside the release allow-list: {}",
+                path.display()
+            ));
         }
     }
     bad.sort();
@@ -94,14 +117,15 @@ fn rust_only() -> Result<(), String> {
         println!("RUST_ONLY_GATE=PASS");
         Ok(())
     } else {
-        for path in bad {
-            eprintln!(
-                "file type is outside the release allow-list: {}",
-                path.display()
-            );
+        for message in bad {
+            eprintln!("{message}");
         }
         Err("RUST_ONLY_GATE=FAIL".into())
     }
+}
+
+fn rust_only() -> Result<(), String> {
+    rust_only_at(workspace_root()?)
 }
 
 fn require(text: &str, needle: &str, file: &str) -> Result<(), String> {
@@ -146,6 +170,41 @@ fn licensing() -> Result<(), String> {
     require(&cla, "complete the CLA privately", "CLA.md")?;
     println!("LICENSING_GATE=PASS");
     println!("LICENSE_MODE={}", mode.trim());
+    Ok(())
+}
+
+fn ci_policy() -> Result<(), String> {
+    let root = workspace_root()?;
+    let ci = fs::read_to_string(root.join(".github/workflows/ci.yml"))
+        .map_err(|e| format!(".github/workflows/ci.yml: {e}"))?;
+    let cla = fs::read_to_string(root.join(".github/workflows/cla.yml"))
+        .map_err(|e| format!(".github/workflows/cla.yml: {e}"))?;
+    require(&ci, CHECKOUT_SHA, ".github/workflows/ci.yml")?;
+    require(
+        &ci,
+        "persist-credentials: false",
+        ".github/workflows/ci.yml",
+    )?;
+    require(&ci, "contents: read", ".github/workflows/ci.yml")?;
+    require(&cla, "pull_request_target:", ".github/workflows/cla.yml")?;
+    require(&cla, "permissions: {}", ".github/workflows/cla.yml")?;
+    require(
+        &cla,
+        "github.event.pull_request.author_association",
+        ".github/workflows/cla.yml",
+    )?;
+    require(
+        &cla,
+        "repository owner is the Project Licensor",
+        ".github/workflows/cla.yml",
+    )?;
+    require(&cla, "grep -Fqx", ".github/workflows/cla.yml")?;
+    if cla.contains("actions/checkout") || cla.contains("cargo run") {
+        return Err(
+            ".github/workflows/cla.yml must not check out or execute pull-request code".into(),
+        );
+    }
+    println!("CI_POLICY_GATE=PASS");
     Ok(())
 }
 
@@ -374,6 +433,7 @@ fn run_release_binary<S: AsRef<OsStr>>(package: &str, args: &[S]) -> Result<(), 
 fn verify() -> Result<(), String> {
     rust_only()?;
     licensing()?;
+    ci_policy()?;
     docs_refs()?;
     run("cargo", FMT_CHECK_ARGS)?;
     run("cargo", CLIPPY_ARGS)?;
@@ -405,6 +465,7 @@ fn dispatch(args: &[String]) -> Result<(), String> {
         None | Some("verify") => verify(),
         Some("rust-only") => rust_only(),
         Some("licensing") => licensing(),
+        Some("ci-policy") => ci_policy(),
         Some("docs-refs") => docs_refs(),
         Some("cla-ack") => cla_ack(),
         Some("fmt") => run("cargo", FMT_CHECK_ARGS),
@@ -429,6 +490,35 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn rust_only_gate_rejects_symlinks_and_executable_files() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("gel-rust-only-gate-{}-{nonce}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("good.rs");
+        fs::write(&source, "fn main() {}\n").unwrap();
+        assert!(rust_only_at(&root).is_ok());
+
+        let link = root.join("link.rs");
+        symlink("good.rs", &link).unwrap();
+        let error = rust_only_at(&root).unwrap_err();
+        assert_eq!(error, "RUST_ONLY_GATE=FAIL");
+        fs::remove_file(&link).unwrap();
+
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o755)).unwrap();
+        let error = rust_only_at(&root).unwrap_err();
+        assert_eq!(error, "RUST_ONLY_GATE=FAIL");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn code_spans_follow_backtick_run_width() {

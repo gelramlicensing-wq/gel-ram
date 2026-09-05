@@ -2,6 +2,9 @@
 
 This CLA lets the Project Licensor accept contributions while preserving the ability to distribute the project under public and separate commercial licenses. A pull request by itself does not accept this agreement. Before opening a pull request, the contributor must contact the project at `gelram.licensing@gmail.com` and complete the CLA privately.
 
+This CLA applies to external contributors. The Project Licensor does not sign
+this agreement with itself for its own contributions.
+
 "Contribution" means any code, documentation or other material the Contributor submits to GEL RAM, by pull request or otherwise.
 
 By signing this CLA, the Contributor agrees, for every Contribution submitted to GEL RAM on or after the date signed:

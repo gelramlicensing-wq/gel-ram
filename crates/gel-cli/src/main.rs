@@ -49,7 +49,7 @@ fn persistence_selftest(dir: &std::path::Path, bank: &[Orb1024]) -> CliResult<()
         return Err("persistence selftest failed".into());
     }
     let verified = verify_file(&path, OpenLimits::UNLIMITED)?;
-    if verified != reopened.header() {
+    if verified.header != reopened.header() || verified.source_format != reopened.source_format() {
         return Err("streaming verify diverged from open_verified".into());
     }
     Ok(())
@@ -130,11 +130,12 @@ fn main() -> CliResult<()> {
         Some("verify") => {
             // The path stays an OsString so non-UTF-8 file names work.
             let path = PathBuf::from(args.next().ok_or("usage: gel-cli verify FILE.gel")?);
-            let header = verify_file(&path, OpenLimits::UNLIMITED)?;
+            let verification = verify_file(&path, OpenLimits::UNLIMITED)?;
             println!("GEL_VERIFY=PASS");
-            println!("format_version={}", header.version);
-            println!("records={}", header.record_count);
-            println!("generation={}", header.generation.0);
+            println!("format_version={}", verification.source_format.version());
+            println!("write_format_version={}", verification.header.version);
+            println!("records={}", verification.header.record_count);
+            println!("generation={}", verification.header.generation.0);
             Ok(())
         }
         Some(other) => Err(format!("unknown command: {other}; use selftest or verify").into()),

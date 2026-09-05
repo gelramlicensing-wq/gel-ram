@@ -303,19 +303,21 @@ fn chunk_bounds(len: usize, threads: usize) -> impl DoubleEndedIterator<Item = (
 /// the lowest global ORB index. The result is identical to `top1(bank, query)`
 /// for every bank, query and thread count.
 ///
-/// Contract: the parallel path runs only when `2 <= threads <= bank.len() / 2`,
-/// so every chunk holds at least two ORBs and exactly `threads - 1` threads
-/// are spawned. Any other `threads` (`0`, `1`, more than half the bank, and
-/// in particular every value above `bank.len()` up to `usize::MAX`) scans on
-/// the calling thread without spawning. The guard divides instead of
-/// multiplying, so it cannot overflow. Panics only if the operating system
-/// refuses to create a thread.
+/// Contract: the parallel path runs only when `2 <= threads <= bank.len() / 2`
+/// and `threads <= min(256, 4 * available_parallelism())`. This bounds resource
+/// use in the public API, not just in the benchmark CLI. Any other value scans
+/// on the calling thread. A thread-spawn failure or worker panic also falls
+/// back to a fresh single-thread scan instead of panicking.
 pub fn top1_threads<'a>(
     bank: &'a [Orb1024],
     query: &Orb1024,
     threads: usize,
 ) -> Option<(usize, u16, &'a Orb1024)> {
-    if threads <= 1 || threads > bank.len() / 2 {
+    let thread_budget = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .saturating_mul(4)
+        .min(256);
+    if threads <= 1 || threads > bank.len() / 2 || threads > thread_budget {
         return top1(bank, query);
     }
     let scan = |(start, len): (usize, usize)| {
@@ -324,24 +326,46 @@ pub fn top1_threads<'a>(
     };
     let mut chunks = chunk_bounds(bank.len(), threads);
     let last = chunks.next_back().expect("threads >= 2");
-    std::thread::scope(|scope| {
-        let handles = chunks
-            .map(|chunk| scope.spawn(move || scan(chunk)))
-            .collect::<Vec<_>>();
+    let parallel = std::thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(threads - 1);
+        let mut failed = false;
+        for chunk in chunks {
+            match std::thread::Builder::new().spawn_scoped(scope, move || scan(chunk)) {
+                Ok(handle) => handles.push(handle),
+                Err(_) => {
+                    failed = true;
+                    break;
+                }
+            }
+        }
         let mut best: Option<(usize, u16, &'a Orb1024)> = None;
-        let hits = handles
-            .into_iter()
-            .map(|handle| handle.join().expect("scan thread panicked"))
-            .chain(std::iter::once(scan(last)));
-        for hit in hits.flatten() {
+        for handle in handles {
+            match handle.join() {
+                Ok(Some(hit)) => {
+                    let better = best.is_none_or(|(index, score, _)| {
+                        hit.1 > score || (hit.1 == score && hit.0 < index)
+                    });
+                    if better {
+                        best = Some(hit);
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => failed = true,
+            }
+        }
+        if failed {
+            return Err(());
+        }
+        if let Some(hit) = scan(last) {
             let better = best
                 .is_none_or(|(index, score, _)| hit.1 > score || (hit.1 == score && hit.0 < index));
             if better {
                 best = Some(hit);
             }
         }
-        best
-    })
+        Ok::<_, ()>(best)
+    });
+    parallel.unwrap_or_else(|()| top1(bank, query))
 }
 
 /// Deterministic descending Top-K; ties are resolved by lower ORB index.
@@ -630,6 +654,16 @@ mod tests {
             }
         }
         assert_eq!(top1_threads(&[], &foreign, usize::MAX), None);
+    }
+
+    #[test]
+    fn thread_counts_above_machine_budget_fall_back_to_top1() {
+        let available = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        let threads = available.saturating_mul(4).min(256).saturating_add(1);
+        let len = threads.saturating_mul(2).max(4);
+        let bank = random_bank(len, 1_200);
+        let query = bank[len - 1];
+        assert_same_as_top1(&bank, &query, threads);
     }
 
     #[test]

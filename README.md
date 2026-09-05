@@ -71,7 +71,7 @@ The residual-only sparse/dense boundary is exactly 100 flipped bits in this form
 - `gel-kernel` — fixed 1024-bit POPCOUNT kernels, contingency and progressive bounds. The kernels are plain `u64::count_ones()`; the emitted instructions depend on the build target features. No hand-written SIMD.
 - `gel-reader` — reversible geometry, Reader16, deterministic Top-K, exact progressive pruning, exact multi-thread Top-1 (`top1_threads`).
 - `gel-structural` — exact prototype/residual structural codec; sparse residuals with nonzero padding bits are rejected.
-- `gel-store` — `.gel` persistence, header+payload CRC64, generation rollback rejection, bounded open, streaming `verify_file`.
+- `gel-store` — `.gel` persistence, header+payload CRC64, generation rollback rejection, bounded open, streaming `verify_file`, and explicit on-disk v1/v2 reporting.
 - `gel-physics` — F0 cache/RAM measurement harness.
 - `gel-bench` — reproducible full-scan benchmark.
 - `gel-cli` — integrated self-test and streaming store verification.
@@ -89,9 +89,22 @@ cargo run --locked --offline -p xtask -- bench 1310720 16 4
 
 `rust-toolchain.toml` pins Rust 1.85.0; rustup installs that toolchain automatically on the first `cargo run`.
 
-Builds target the host CPU with AVX-512 left off: `.cargo/config.toml` sets `-C target-cpu=native -C target-feature=-avx512f`, so `u64::count_ones()` compiles to POPCNT and AVX2 where the CPU has them. Results are identical on every target; only time changes. On the measurement machine (mobile Zen5, 512-bit operations executed as two 256-bit halves) enabling AVX-512 added 4 % to the full scan but made the physics probes up to 7x slower, so it is off by default; `docs/SILICON-2026-09-04.md` records both. A portable x86-64 baseline build is `RUSTFLAGS="-C target-cpu=x86-64" cargo run ...` (the environment variable replaces the configured flags). The `backend=` line of `gel-bench` records which features were compiled in.
+Normal builds use rustc's portable target defaults. Hardware-specific builds
+must be requested explicitly and recorded with their results. For example,
+`RUSTFLAGS="-C target-cpu=native" cargo run ...` enables features of the build
+machine. On x86-64, `RUSTFLAGS="-C target-cpu=x86-64-v3" cargo run ...` is a
+stable POPCNT/AVX2 measurement profile that excludes AVX-512 without relying
+on an unstable `target-feature` switch. Results are bit-identical; only timing
+changes. `docs/SILICON-2026-09-04.md` records the measured baseline, native,
+x86-64-v3 and historical AVX-512-off profiles. The `backend=` line of
+`gel-bench` records which features were compiled in.
 
-`verify` runs the Rust-only, licensing and docs-refs gates (every backtick-quoted repository path in Markdown files must exist), formatting, Clippy with warnings denied, the release build, rustdoc with warnings denied, the workspace tests, the `gel-cli` selftest and a `gel-bench` smoke run (8192 ORBs, 3 rounds, 2 threads then 1 thread).
+`verify` runs the Rust-only, licensing, CI-policy and docs-refs gates (every
+backtick-quoted repository path in Markdown files must exist), formatting,
+Clippy with warnings denied, the release build, rustdoc with warnings denied,
+the workspace tests, the `gel-cli` selftest and a `gel-bench` smoke run (8192
+ORBs, 3 rounds, 2 threads then 1 thread). The Rust-only gate also rejects
+symlinks and executable files in the release tree.
 
 `bench` takes `<ORB_COUNT> <ROUNDS> [THREADS]`. `THREADS` defaults to 1; for `THREADS` > 1 it must satisfy `2 * THREADS <= ORB_COUNT`, and it must always satisfy `THREADS <= 4 x available parallelism`; other values are rejected. The multi-thread scan is an exact merge (lowest index wins a tie) and must return the same Top-1 as the single-thread scan: `thread_scan=` names the path taken (`single` or `exact_merge_lowest_index_tie`) and `thread_scan_exact=` prints `PASS` when the multi-thread Top-1 equalled the single-thread Top-1 in that run, or `SINGLE` for `THREADS` = 1. The output header is `GEL_BENCH_V3`. The `backend=` line prints `count_ones(popcnt=..,avx2=..)`: whether the `popcnt` and `avx2` target features were enabled when the binary was compiled, which decides the instruction rustc emits for `u64::count_ones()`. AVX-512 use cannot be observed through `cfg` on Rust 1.85 and is checked by disassembly in the measurement record. `observed_cpu_start=` and `observed_cpu_end=` are a best-effort Linux reading of the CPU the process ran on; they document a run and do not replace pinning.
 
@@ -117,6 +130,9 @@ written store == reopened store
 ```
 
 v2 persistence protects both metadata and payload with CRC64-ECMA. Single-writer generation rollback is rejected.
+On Unix, a newly created store is mode `0600`, while an atomic replacement
+preserves the existing file mode. Legacy v1 input is reported as v1 even
+though a subsequent write deliberately migrates it to protected v2.
 
 ## Scope
 

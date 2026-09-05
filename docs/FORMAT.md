@@ -36,4 +36,8 @@ CRC is for accidental corruption detection, not authentication. An untrusted rem
 
 ## v1 migration
 
-v0.2 can read legacy `GELORB01` stores and verifies their legacy payload checksum. v1 had no header authentication, so it cannot retroactively detect a historical metadata bit flip. Any subsequent write emits protected v2.
+v0.2 can read legacy `GELORB01` stores and verifies their legacy payload
+checksum. v1 had no header authentication, so it cannot retroactively detect a
+historical metadata bit flip. Verification reports the actual source as v1
+separately from the in-memory v2 upgrade header. Any subsequent write emits
+protected v2.

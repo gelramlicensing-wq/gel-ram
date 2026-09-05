@@ -1,25 +1,33 @@
 name: cla
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   cla-acknowledgement:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - run: rustup toolchain install 1.85.0 --profile minimal
-      - run: rustup default 1.85.0
-      - env:
+      - name: Require the exact CLA acknowledgement
+        env:
+          PR_AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: cargo run --locked --offline -p xtask -- cla-ack
+        run: |
+          if [ "$PR_AUTHOR_ASSOCIATION" = 'OWNER' ]; then
+            printf '%s\n' 'CLA_ACK_GATE=PASS: repository owner is the Project Licensor.'
+            exit 0
+          fi
+          required_lower='- [x] I have completed the GEL RAM CLA privately with the project before opening this pull request.'
+          required_upper='- [X] I have completed the GEL RAM CLA privately with the project before opening this pull request.'
+          if printf '%s\n' "$PR_BODY" | grep -Fqx -e "$required_lower" -e "$required_upper"; then
+            printf '%s\n' 'CLA_ACK_GATE=PASS'
+          else
+            printf '%s\n' 'CLA_ACK_GATE=FAIL: completed private CLA acknowledgement is missing.' >&2
+            exit 1
+          fi
