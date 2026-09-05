@@ -74,10 +74,19 @@ cargo run --locked --offline --release -p gel-bench -- <ORB_COUNT> <ROUNDS> [THR
 
 `THREADS` defaults to 1; for `THREADS` > 1 it must satisfy `2 * THREADS <= ORB_COUNT`,
 and it must always satisfy `THREADS <= 4 x available parallelism`; other values
-are rejected. The output
-Build target: the default build uses `-C target-cpu=native -C target-feature=-avx512f` from `.cargo/config.toml`; a portable baseline is `RUSTFLAGS="-C target-cpu=x86-64"`. Every record must quote the `backend=` line and the disassembly counts of `popcnt`, `vpopcntq` and `zmm` in the binary, as in `docs/SILICON-2026-09-04.md`. Physics rows must come from a build without AVX-512 unless the record shows that the `zmm` reduction is not slower than the AVX2 one on that machine.
+are rejected. The public reader API additionally caps the ceiling at 256 and
+falls back to a single-thread scan if a worker cannot be created.
 
-header is `GEL_BENCH_V3`. Output lines to read:
+Normal builds use rustc's portable target defaults. Select a measurement
+profile explicitly: `RUSTFLAGS="-C target-cpu=native"` for the current machine,
+or `RUSTFLAGS="-C target-cpu=x86-64-v3"` for an x86-64 POPCNT/AVX2 profile that
+does not enable AVX-512. Every record must quote the complete `RUSTFLAGS`, the
+`backend=` line and the disassembly counts of `popcnt`, `vpopcntq` and `zmm` in
+the binary, as in `docs/SILICON-2026-09-04.md`. Physics rows must come from a
+build without AVX-512 unless the record shows that the `zmm` reduction is not
+slower than the AVX2 one on that machine.
+
+The output header is `GEL_BENCH_V3`. Output lines to read:
 
 - `backend=count_ones(popcnt=..,avx2=..)`: whether the `popcnt` and `avx2`
   target features were enabled when the binary was compiled. AVX-512 use

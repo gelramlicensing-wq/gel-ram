@@ -13,8 +13,26 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
 pub const HEADER_BYTES: usize = 64;
 pub const V2_HEADER_CRC_OFFSET: usize = 48;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StoreFormat {
+    LegacyV1,
+    V2,
+}
+
+impl StoreFormat {
+    pub const fn version(self) -> u32 {
+        match self {
+            Self::LegacyV1 => 1,
+            Self::V2 => 2,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Header {
@@ -26,6 +44,17 @@ pub struct Header {
     pub generation: Generation,
     pub payload_crc64: u64,
     pub header_crc64: u64,
+}
+
+/// Result of validating an on-disk store.
+///
+/// `source_format` reports what was actually read. `header` is always the
+/// protected v2 header that would be emitted by a subsequent write; legacy v1
+/// payloads are upgraded in memory only after their legacy checksum passes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Verification {
+    pub source_format: StoreFormat,
+    pub header: Header,
 }
 
 impl Header {
@@ -126,6 +155,7 @@ impl OpenLimits {
 #[derive(Debug)]
 pub struct RamStore {
     header: Header,
+    source_format: StoreFormat,
     orbs: Vec<Orb1024>,
 }
 
@@ -133,11 +163,18 @@ impl RamStore {
     pub fn from_orbs(orbs: Vec<Orb1024>, generation: Generation) -> Self {
         let payload_crc64 = crc_orbs(&orbs);
         let header = Header::new(orbs.len() as u64, generation, payload_crc64);
-        Self { header, orbs }
+        Self {
+            header,
+            source_format: StoreFormat::V2,
+            orbs,
+        }
     }
 
     pub fn header(&self) -> Header {
         self.header
+    }
+    pub fn source_format(&self) -> StoreFormat {
+        self.source_format
     }
     pub fn orbs(&self) -> &[Orb1024] {
         &self.orbs
@@ -194,8 +231,12 @@ impl RamStore {
             check.update(&bytes);
             orbs.push(Orb1024::from_le_bytes(&bytes)?);
         }
-        let header = check.finish()?;
-        Ok(RamStore { header, orbs })
+        let verification = check.finish()?;
+        Ok(RamStore {
+            header: verification.header,
+            source_format: verification.source_format,
+            orbs,
+        })
     }
 }
 
@@ -204,10 +245,10 @@ impl RamStore {
 /// Runs exactly the header, limit and file-length checks of
 /// [`RamStore::open_verified_with_limits`], then streams the payload through
 /// one 128-byte stack buffer to check the payload digest. No payload is
-/// retained: memory use is constant regardless of file size. Returns the
-/// validated header; for a v1 file this is the version-2 header a loaded
-/// store would carry (generation preserved, payload CRC64 freshly computed).
-pub fn verify_file(path: impl AsRef<Path>, limits: OpenLimits) -> Result<Header, GelError> {
+/// retained: memory use is constant regardless of file size. The report keeps
+/// the actual on-disk source format separate from the protected v2 header a
+/// loaded store would carry.
+pub fn verify_file(path: impl AsRef<Path>, limits: OpenLimits) -> Result<Verification, GelError> {
     let Validated {
         mut file,
         count,
@@ -264,13 +305,16 @@ impl PayloadCheck {
     /// Compares the digests with the header and returns the header a loaded
     /// store carries. A v1 header is upgraded so any subsequent write emits
     /// protected v2.
-    fn finish(self) -> Result<Header, GelError> {
+    fn finish(self) -> Result<Verification, GelError> {
         match self {
             Self::V2 { header, crc } => {
                 if crc.finish() != header.payload_crc64 {
                     return Err(GelError::CorruptStore);
                 }
-                Ok(header)
+                Ok(Verification {
+                    source_format: StoreFormat::V2,
+                    header,
+                })
             }
             Self::V1 {
                 record_count,
@@ -282,7 +326,10 @@ impl PayloadCheck {
                 if checksum.finish() != expected_checksum {
                     return Err(GelError::CorruptStore);
                 }
-                Ok(Header::new(record_count, generation, crc.finish()))
+                Ok(Verification {
+                    source_format: StoreFormat::LegacyV1,
+                    header: Header::new(record_count, generation, crc.finish()),
+                })
             }
         }
     }
@@ -441,10 +488,31 @@ fn temp_path(path: &Path) -> PathBuf {
 }
 
 fn create_temp_file(path: &Path) -> Result<(PathBuf, File), GelError> {
+    #[cfg(unix)]
+    let existing_mode = match fs::metadata(path) {
+        Ok(metadata) => Some(metadata.permissions().mode() & 0o7777),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+
     for _ in 0..128 {
         let tmp = temp_path(path);
-        match OpenOptions::new().write(true).create_new(true).open(&tmp) {
-            Ok(file) => return Ok((tmp, file)),
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&tmp) {
+            Ok(file) => {
+                #[cfg(unix)]
+                if let Some(mode) = existing_mode {
+                    if let Err(error) = file.set_permissions(fs::Permissions::from_mode(mode)) {
+                        drop(file);
+                        let _ = fs::remove_file(&tmp);
+                        return Err(error.into());
+                    }
+                }
+                return Ok((tmp, file));
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error.into()),
         }
@@ -625,6 +693,7 @@ mod tests {
 
         let reopened = RamStore::open_verified(&source).unwrap();
         assert_eq!(reopened.orbs(), records);
+        assert_eq!(reopened.source_format(), StoreFormat::LegacyV1);
         assert_eq!(reopened.header().version, 2);
         assert_eq!(reopened.header().generation, Generation(77));
         reopened.write_atomic(&migrated).unwrap();
@@ -752,11 +821,14 @@ mod tests {
 
     /// The same Ok/Err outcome from `verify_file` and `open_verified`, with
     /// equal headers on success and equal error text on failure.
-    fn assert_same_verdict(path: &Path) -> Result<Header, GelError> {
+    fn assert_same_verdict(path: &Path) -> Result<Verification, GelError> {
         let streamed = verify_file(path, OpenLimits::UNLIMITED);
         let loaded = RamStore::open_verified(path);
         match (&streamed, &loaded) {
-            (Ok(header), Ok(store)) => assert_eq!(*header, store.header()),
+            (Ok(verification), Ok(store)) => {
+                assert_eq!(verification.header, store.header());
+                assert_eq!(verification.source_format, store.source_format());
+            }
             (Err(a), Err(b)) => assert_eq!(a.to_string(), b.to_string()),
             other => panic!("verify_file and open_verified disagree: {other:?}"),
         }
@@ -769,10 +841,11 @@ mod tests {
         let records = [orb(61), orb(62), orb(63)];
         let original = v2_file_bytes(&records, 44);
         fs::write(&path, &original).unwrap();
-        let header = assert_same_verdict(&path).unwrap();
-        assert_eq!(header.version, 2);
-        assert_eq!(header.record_count, 3);
-        assert_eq!(header.generation, Generation(44));
+        let verification = assert_same_verdict(&path).unwrap();
+        assert_eq!(verification.source_format, StoreFormat::V2);
+        assert_eq!(verification.header.version, 2);
+        assert_eq!(verification.header.record_count, 3);
+        assert_eq!(verification.header.generation, Generation(44));
 
         let mut flipped = original.clone();
         flipped[HEADER_BYTES + 200] ^= 0x01;
@@ -809,17 +882,25 @@ mod tests {
     }
 
     #[test]
-    fn verify_file_returns_upgraded_v2_header_for_legacy_v1_store() {
+    fn verify_file_reports_legacy_v1_while_providing_upgrade_header() {
         let path = path("verify-legacy");
         let records = [orb(71), orb(72)];
         let original = legacy_v1_file_bytes(&records, 77);
         fs::write(&path, &original).unwrap();
-        let header = assert_same_verdict(&path).unwrap();
-        assert_eq!(header.version, 2);
-        assert_eq!(header.record_count, 2);
-        assert_eq!(header.generation, Generation(77));
-        assert_eq!(header.payload_crc64, crc64_ecma(&original[HEADER_BYTES..]));
-        assert_eq!(Header::decode(&header.encode()).unwrap(), header);
+        let verification = assert_same_verdict(&path).unwrap();
+        assert_eq!(verification.source_format, StoreFormat::LegacyV1);
+        assert_eq!(verification.source_format.version(), 1);
+        assert_eq!(verification.header.version, 2);
+        assert_eq!(verification.header.record_count, 2);
+        assert_eq!(verification.header.generation, Generation(77));
+        assert_eq!(
+            verification.header.payload_crc64,
+            crc64_ecma(&original[HEADER_BYTES..])
+        );
+        assert_eq!(
+            Header::decode(&verification.header.encode()).unwrap(),
+            verification.header
+        );
 
         let mut flipped = original.clone();
         flipped[HEADER_BYTES + 5] ^= 0x10;
@@ -829,6 +910,33 @@ mod tests {
             Err(GelError::CorruptStore)
         ));
         let _ = fs::remove_file(path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_is_private_by_default_and_preserves_existing_mode() {
+        let fresh = path("private-mode-new");
+        RamStore::from_orbs(vec![orb(1)], Generation(1))
+            .write_atomic(&fresh)
+            .unwrap();
+        assert_eq!(
+            fs::metadata(&fresh).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        fs::set_permissions(&fresh, fs::Permissions::from_mode(0o640)).unwrap();
+        RamStore::from_orbs(vec![orb(2)], Generation(2))
+            .write_if_newer(&fresh)
+            .unwrap();
+        assert_eq!(
+            fs::metadata(&fresh).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        assert_eq!(
+            RamStore::open_verified(&fresh).unwrap().header().generation,
+            Generation(2)
+        );
+        let _ = fs::remove_file(fresh);
     }
 
     // ---- deterministic mutation sweeps -------------------------------------
@@ -939,9 +1047,13 @@ mod tests {
                 // generation: v1 has no header authentication, so the store
                 // opens with the mutated generation. Documented negative.
                 32..=39 => {
-                    let header = result.unwrap_or_else(|e| panic!("bit {bit}: {e}"));
-                    assert_eq!(header.generation.0, GENERATION ^ (1u64 << (bit - 256)));
-                    assert_eq!(header.record_count, 2);
+                    let verification = result.unwrap_or_else(|e| panic!("bit {bit}: {e}"));
+                    assert_eq!(verification.source_format, StoreFormat::LegacyV1);
+                    assert_eq!(
+                        verification.header.generation.0,
+                        GENERATION ^ (1u64 << (bit - 256))
+                    );
+                    assert_eq!(verification.header.record_count, 2);
                     undetected += 1;
                 }
                 // legacy checksum

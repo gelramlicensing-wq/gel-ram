@@ -17,13 +17,19 @@ Performance changes must include before/after benchmark output and must not weak
 
 ## Pull request policy
 
+External contributors must:
+
 1. Contact the project at `gelram.licensing@gmail.com` first.
 2. Complete the project CLA privately; see `CLA.md`.
 3. Only then open a pull request.
 
 The pull request template (`.github/PULL_REQUEST_TEMPLATE.md`) contains a CLA
 acknowledgement line. CI checks that the line is present and ticked (`[x]` or
-`[X]`) and re-checks it when the pull request description is edited. The
+`[X]`) and re-checks it when the pull request description is edited. That
+metadata-only check runs from the trusted default branch and never checks out
+or executes pull-request code. Pull requests opened by the repository owner,
+who is the Project Licensor, pass this metadata gate without a separate CLA.
+The
 `cla-acknowledgement` and `verify` checks are intended to be configured as
 required status checks on the default branch. Pull requests without the
 acknowledgement, or from contributors without a CLA on file, are closed
