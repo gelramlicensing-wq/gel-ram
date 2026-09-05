@@ -1,0 +1,16 @@
+[package]
+name = "gel-bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+gel-core = { path = "../gel-core" }
+gel-kernel = { path = "../gel-kernel" }
+gel-orb = { path = "../gel-orb" }
+gel-reader = { path = "../gel-reader" }
+
+[lints]
+workspace = true

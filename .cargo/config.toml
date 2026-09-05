@@ -1,0 +1,10 @@
+[alias]
+xtask = "run --package xtask --"
+
+[build]
+# Builds target the host CPU so u64::count_ones() compiles to POPCNT/AVX2 where
+# available. AVX-512 is left off: on the measurement machine (mobile Zen5, 512-bit
+# ops executed as two 256-bit halves) it added 4% to the scan but made the
+# physics probes 7x slower; see docs/SILICON-2026-09-04.md.
+# Portable x86-64 baseline: RUSTFLAGS="-C target-cpu=x86-64" cargo ...
+rustflags = ["-C", "target-cpu=native", "-C", "target-feature=-avx512f"]

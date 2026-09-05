@@ -1,0 +1,17 @@
+[package]
+name = "gel-structural"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+gel-core = { path = "../gel-core" }
+gel-orb = { path = "../gel-orb" }
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
