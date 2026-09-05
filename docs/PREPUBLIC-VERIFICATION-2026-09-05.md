@@ -1,9 +1,10 @@
 # Pre-public verification — 2026-09-05
 
-This record applies to the GEL RAM v0.2.0 PolyForm candidate on the local
-`pre-public-hardening-v0.2.0` branch. At the time of verification the GitHub
-repository remained private. This record is about the source candidate; it is
-not a semantic-quality or legal-review certificate.
+This record applies to the GEL RAM v0.2.0 PolyForm candidate merged through
+pull request 1 as commit `558614188feb185fabb56add38d5bf133f1c00d0`
+(tree `6c1e5353c367079b9f6124bdcdcd6da679a309d3`). At the time of final
+verification the GitHub repository remained private. This record is about the
+source candidate; it is not a semantic-quality or legal-review certificate.
 
 ## Source inventory
 
@@ -84,13 +85,26 @@ This is one machine-specific timing sample over deterministic synthetic ORBs.
 It demonstrates bit-exact execution and memory-scan throughput; it does not
 measure real-data recall, semantic accuracy or compression quality.
 
-## GitHub gates still required
+## GitHub gate results
 
-The updated branch had not yet been pushed when this local record was created.
-Therefore the updated Linux verification job and new macOS/Windows portable
-compile jobs are `NOT_RUN` on GitHub for this exact tree. They must all pass on
-the pull request before merging into `main`. Public visibility must remain off
-until that pull request and the final repository-settings review are complete.
+Pull request 1 was squash-merged into `main` only after GitHub displayed `All
+checks have passed`, with six successful checks and no merge conflict. Those
+checks exercised the Linux authoritative verification job and the macOS and
+Windows portable compile jobs on the push and pull-request events. After the
+squash merge, local `HEAD` and `origin/main` both resolved to commit
+`558614188feb185fabb56add38d5bf133f1c00d0`; the authoritative portable gate
+was run again on that commit and produced `GEL_VERIFY_ALL=PASS` with all 66
+tests passing.
+
+The hardened CLA workflow changed from `pull_request` to
+`pull_request_target`, so its trusted-base definition became active only after
+pull request 1 reached the default branch. This record is finalized through a
+documentation-only follow-up pull request, which may be merged only after its
+`cla-acknowledgement` owner check and normal CI checks pass. The resulting
+GitHub check record is the remote execution evidence for that workflow.
+
+Public visibility must remain off until the follow-up pull request and the
+final repository-settings review are complete.
 
 The PolyForm and commercial-licensing documents have not been certified by a
 lawyer. Technical verification cannot replace legal advice.
