@@ -1,12 +1,16 @@
 # GEL RAM
 
+[![Rust CI](https://github.com/gelramlicensing-wq/gel-ram/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gelramlicensing-wq/gel-ram/actions/workflows/ci.yml)
+
 **A Rust memory core for an AI knowledge bank — bit-exact binary reconstruction and reproducible hardware benchmarks.**
 
 The goal of GEL is a knowledge bank for AI: preserving encoded knowledge and making it available for associative readout. Persistence supports that goal; it is not the purpose of the project by itself.
 
-This repository publishes a focused part of that work. GEL RAM v0.2.1 candidate locates, compares, persists and structurally reconstructs fixed binary records called **ORBs**, with predictable RAM cost and measurable latency. It is not yet a complete text-to-knowledge system: the public core does not include a knowledge encoder or an end-to-end question-answering demo.
+This repository publishes a focused part of that work. GEL RAM v0.2.1 locates, compares, persists and structurally reconstructs fixed binary records called **ORBs**, with predictable RAM cost and measurable latency. It is not yet a complete text-to-knowledge system: the public core does not include a knowledge encoder or an end-to-end question-answering demo.
 
-## v0.2.1 candidate: exact readout, less repeated work
+**Start here:** [run the checks](#quick-start) · [try the comparison demo](docs/TRY-IT.md) · [releases](https://github.com/gelramlicensing-wq/gel-ram/releases) · [development priorities](docs/ROADMAP.md).
+
+## v0.2.1: exact readout, less repeated work
 
 - Full Top-K rejects candidates that cannot enter the result set before scanning the sorted results. Progressive Top-K reuses the already counted prefix. Scores, strict pruning and index-based tie ordering are unchanged.
 - A same-binary [comparison instrument](docs/TOPK-BENCHMARK.md) retains the v0.2.0 algorithm as a control. No extra search index or private knowledge encoder is needed.
@@ -14,7 +18,7 @@ This repository publishes a focused part of that work. GEL RAM v0.2.1 candidate 
 - Generation-guarded writes verify the existing payload before replacement. Legacy v1's unprotected generation cannot authorize a monotonic write.
 - The [data-integrity audit](docs/DATA-INTEGRITY.md) independently checks exact reconstruction and ranking, and separates FP16/Q8 conversion loss from GEL transport errors.
 
-This is a **local candidate, not a published release**. Passing binary tests does not establish 99% knowledge retrieval. The experimental verified-range interface is not included.
+This is **experimental software for evaluation, not a production-readiness claim**. The implementation was merged in [PR #3](https://github.com/gelramlicensing-wq/gel-ram/pull/3); [post-merge CI](https://github.com/gelramlicensing-wq/gel-ram/actions/runs/34032946492) passed Linux verification and the independent integrity audit, plus macOS/Windows compilation checks. Passing binary tests does not establish 99% knowledge retrieval. The experimental verified-range interface is not included.
 
 Local Ryzen AI 9 HX 370 measurements, three trials, unchanged exact results:
 
@@ -29,6 +33,35 @@ a universal speedup. K=1 includes regressions. The [full validation record](docs
 contains every planned case, raw samples, hardware settings, FP16/Q8 fidelity
 results, and the still-unmet natural-text retrieval gate.
 
+### Measured example: same results, lower latency
+
+Full Top-32, 16 MiB uniform synthetic ORBs, x86-64-v3. Bars show each
+trial's median query latency in milliseconds; **lower is better**.
+
+```mermaid
+xychart-beta
+    title "Exact Top-32: v0.2.0 vs v0.2.1"
+    x-axis ["Old T1", "New T1", "Old T2", "New T2", "Old T3", "New T3"]
+    y-axis "Median latency (ms)" 0 --> 3.5
+    bar [3.085977, 0.841093, 2.158102, 0.383111, 2.023608, 0.393841]
+```
+
+| Trial | v0.2.0 (ms) | v0.2.1 (ms) |
+|---|---:|---:|
+| 1 | 3.085977 | 0.841093 |
+| 2 | 2.158102 | 0.383111 |
+| 3 | 2.023608 | 0.393841 |
+
+Ryzen AI 9 HX 370, 93 GiB RAM, Linux 6.17.0-1030-oem, Rust 1.85.0,
+CPU 2, warm RAM, shared host; eleven measured queries per trial after two
+warmups. All four benchmark methods rotate execution order. Values are from
+the three `dataset=uniform k=32` result rows in the
+[raw log](docs/evidence-v0.2.1/final-topk-v3.txt), divided by 1,000,000.
+Variation across trials is visible, not averaged away. This selected workload
+does not represent all cases: full Top-K at K=1 on the all-tied v3 bank ranged
+from 0.79× to 1.20× old/new speed, including a slowdown. See the
+[complete matrix](docs/VALIDATION-v0.2.1.md#full-planned-performance-matrix).
+
 ## GEL at a glance
 
 ```mermaid
@@ -39,7 +72,7 @@ flowchart TB
 
     encoder -. "Integration boundary: encoded ORBs" .-> orbs
 
-    subgraph core["Public Rust core · v0.2.1 candidate"]
+    subgraph core["Public Rust core · v0.2.1"]
         orbs["Binary ORBs<br/>1024 bits · 128 bytes each"]
         orbs --> readers["Compare and search<br/>Reader16 · exact Top-K"]
         readers --> matches["Matching ORB indices and scores"]
@@ -142,8 +175,29 @@ The residual-only sparse/dense boundary is exactly 100 flipped bits in this form
 
 ## Quick start
 
+Prerequisites: Git and [Rust via rustup](https://www.rust-lang.org/tools/install).
+Clone into a new directory, not over an existing checkout:
+
 ```text
+git clone https://github.com/gelramlicensing-wq/gel-ram.git
+cd gel-ram
+rustup toolchain install 1.85.0 --profile minimal --component rustfmt --component clippy
 cargo run --locked --offline -p xtask -- verify
+```
+
+Expected final line: `GEL_VERIFY_ALL=PASS`, with no failed tests. Compilation
+takes longer on the first run. Downloading Git sources and installing the
+toolchain need internet access; Cargo's `--offline` flag does not make that
+initial setup offline. The workspace uses no third-party Cargo dependencies.
+For a fixed snapshot, select a tag from the Releases page before testing and
+record `git rev-parse HEAD` with your results.
+
+The [comparison demo](docs/TRY-IT.md) needs no model, private encoder or dataset.
+It shows binary readout and data correctness, not question answering.
+
+Additional hardware experiments (sizes and timings differ from the quick check):
+
+```text
 cargo run --locked --offline -p xtask -- physics 5
 cargo run --locked --offline -p xtask -- bench 1310720 16
 cargo run --locked --offline -p xtask -- bench 1310720 16 1
@@ -214,6 +268,13 @@ See `docs/ARCHITECTURE.md`, `docs/FORMAT.md`, `docs/READER16.md`, `docs/STRUCTUR
 GEL RAM is an independent hobby project. I am a hobbyist, not a professional programmer, and I use AI tools to help turn my ideas into code, investigate problems and develop tests. I guide the project's direction and decide which changes to accept.
 
 AI assistance is part of the development process, not evidence that a result is correct. The standard for this project is reproducible tests, explicit limitations and measurements on identified hardware. Independent reproduction, bug reports and constructive technical criticism are welcome.
+
+Want to help? Run the [demo](docs/TRY-IT.md) and open a
+[reproduction report](https://github.com/gelramlicensing-wq/gel-ram/issues/new?template=reproduction.yml).
+Include the commit, hardware, compiler flags, correctness results and all
+timing trials, including slower ones. Never upload credentials, private
+knowledge banks or confidential model data. See the [roadmap](docs/ROADMAP.md)
+for the distinction between public-core work and future knowledge-bank evaluation.
 
 ## Licensing
 

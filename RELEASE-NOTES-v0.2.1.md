@@ -1,7 +1,9 @@
-# GEL RAM v0.2.1 — local candidate
+# GEL RAM v0.2.1 — experimental public-core preview
 
-This candidate is based on merged main commit 04a4d21, not a replacement
-with the older snapshot contained in the supplied v0.2.1 ZIP.
+An evaluation release of the Rust binary core for an AI knowledge bank.
+The implementation builds on public v0.2.0 commit 04a4d21 and was merged
+as commit 95c7dab in [PR #3](https://github.com/gelramlicensing-wq/gel-ram/pull/3).
+This is not a complete knowledge encoder or production-readiness claim.
 
 ## User-visible value
 
@@ -39,6 +41,23 @@ checks the preserved distribution LICENSE fingerprint and catches accidental
 non-project Gmail contacts without echoing addresses into CI output.
 That check is not a general secret scanner or legal audit.
 
-No new CLA, patent or trademark terms from the supplied ZIP are adopted in
-this technical candidate. The existing legal documents remain unchanged.
-Publication and remote multi-platform CI remain separate release steps.
+The existing legal documents remain unchanged.
+
+## Verification and getting started
+
+- 79 tests passed in each local portable/x86-64-v3 verification profile.
+- 6240 final comparison outputs matched the frozen exact reference.
+- [Post-merge CI](https://github.com/gelramlicensing-wq/gel-ram/actions/runs/34032946492)
+  passed Linux verification and the independent integrity audit, plus
+  macOS/Windows compilation checks (not runtime testing on those two systems).
+- Full Top-32 on the 16 MiB uniform synthetic bank measured 3.67–5.63×
+  old/new median latency ratios on Ryzen AI 9 HX 370, x86-64-v3, across
+  three trials. This is not a universal gain; K=1 includes regressions.
+- Natural-text lexical Recall@10 was 0.480 / 0.270: the 0.99 semantic
+  retrieval target remains unmet. Exact byte transport is a separate test.
+
+Start with [README](README.md#quick-start) and [the reproducible demo](docs/TRY-IT.md).
+The source distribution includes a SHA-256 manifest; it excludes itself.
+For a downloaded release ZIP, verify its separate SHA-256 checksum first,
+then check the per-file manifest after extracting. Hashes detect mismatch,
+not independent proof of publisher identity.

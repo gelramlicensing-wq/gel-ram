@@ -1,39 +1,65 @@
-# Roadmap
+# Development priorities
 
-## Implemented in v0.2.0
+This is a direction, not a delivery-date promise. GEL's intended role is an
+AI knowledge bank. The public binary engine is one component, not that entire
+system. Private research archives are not a list of shipped features.
 
-- F0: dependency-free memory physics harness.
-- F1: contingency kernel, Reader16, deterministic Top-K, exact progressive pruning.
-- F2: exact structural XOR codec, sparse/dense residual, literal fallback, depth <= 2.
-- Store v2: CRC64-ECMA protected metadata+payload, bounded open, rollback rejection.
-- Bench: exact multi-thread scan (lowest-index tie handling), Top-1 equal to the single-thread scan.
-- F0 v3: sequential and random-fetch probes without a per-element barrier, on 64-byte-aligned buffers.
+## Next: independently reproduce the public core
 
-## Next gates
+- Collect complete portable and hardware-specific comparison logs on other CPUs.
+- Investigate K=1 regressions without weakening exactness or hiding slower cases.
+- Extend actual runtime testing to macOS/Windows; current CI only compiles there.
+- Preserve byte-exact reconstruction, deterministic ranking and bounded resources.
 
-### F0.5 topology closure
+Acceptance: publish the hardware, commands, full result matrix and failure
+cases. A speedup on one selected case is not a universal improvement.
 
-Measure on target hardware:
+## Then: a small end-to-end knowledge-bank evaluation
 
-- 4 KiB vs transparent/explicit huge pages,
-- L3 stream bandwidth per cache domain,
-- RAM stream bandwidth above LLC,
-- batch 8/16/32 random ORB fetches,
-- thread scaling per L3 domain with pinning,
-- dTLB/LLC hardware counters.
+Define a redistributable corpus, explicit encoder, held-out queries, relevant
+source records and fixed K before tuning. Test paraphrases, distractors and
+queries whose answer is absent. Prevent exact query text or labels leaking
+into the indexed representation. Return evidence references, not unsupported
+answers; evaluate an abstention policy separately.
 
-### F1.5 information separability
+Compare FP16, a specified Q8 format and GEL only with a documented mapping of
+the same knowledge and the same queries. Count encoder/context storage and
+query costs. Report Recall@K, latency and total memory separately. The target
+of 0.99 knowledge retrieval is not achieved by current lexical results
+(Recall@10 0.480 / 0.270). Byte-exactness remains 1.0 on all tested cases.
 
-On a declared dataset, measure conditional value of each Reader16 judgment. Coordinate isometries never count as new information.
+Publishing a demonstration does not require publishing every private research
+module. However, any claim advertised as independently reproducible needs
+enough public data, code and instructions to reproduce that particular claim.
 
-### F2.5 capacity
+## Existing engineering gates retained
 
-Run structural coding on real ORBs and report distribution of exact DER, residual popcount and context touch. No fixed 4x/8x/16x claim is accepted without the denominator.
+The original F0–F4 direction remains in scope; the nearer-term priorities
+above do not mark these gates complete or replace them.
 
-### F3 locator + sketch
+Already implemented in v0.2.0: the dependency-free F0 memory-physics harness,
+F1 contingency kernel/Reader16/exact ranking, F2 structural XOR codec with
+literal fallback and depth at most two, v2 CRC-protected persistence,
+exact threaded Top-1 and aligned sequential/random-fetch probes.
 
-Build the first scale-selective path only after F0/F2 choose the physical budget. Membership verification must accompany any perfect-hash locator.
+- **F0.5 topology closure:** measure 4 KiB versus transparent/explicit huge
+  pages, per-domain L3 bandwidth, RAM bandwidth above LLC, batch 8/16/32
+  random ORB fetches, pinned per-domain thread scaling and dTLB/LLC counters.
+- **F1.5 information separability:** measure the conditional value of each
+  Reader16 judgment on a declared dataset. Coordinate isometries do not
+  constitute new information.
+- **F2.5 capacity:** report exact DER, residual-popcount distributions and
+  context-touch cost on real ORBs. No fixed compression-factor claim without
+  its denominator and all context costs.
+- **F3 locator and sketch:** establish the F0/F2 physical budget before a
+  scale-selective path; perfect-hash locators still need membership checks.
+- **F4 end-to-end scale:** evaluate ten million ORBs before one billion.
+  Latency, capacity and exactness form a combined gate, not independent
+  marketing claims.
 
-### F4 E2E scale
+## Not claimed or scheduled
 
-10^7 ORBs before 10^9. Query latency, capacity and exactness are one compound gate, not separate marketing numbers.
+No arbitrary FP16-to-128-byte lossless compression, replacement for a complete
+LLM, zero-hallucination guarantee, production durability certification, or
+universal hardware speedup is promised. Proposed work must show measurable
+value and retain correctness before it becomes a release headline.

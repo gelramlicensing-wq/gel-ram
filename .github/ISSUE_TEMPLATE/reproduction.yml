@@ -1,0 +1,40 @@
+name: Benchmark or correctness reproduction
+description: Share an independent test of the public GEL core, including slower or failing cases.
+title: "reproduction: "
+body:
+  - type: input
+    id: revision
+    attributes:
+      label: Commit or release tag
+      description: Include the exact commit tested.
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and environment
+      description: CPU, RAM, OS, Rust version, compiler flags, affinity and background load/power settings if known.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Exact commands
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Correctness and full timing results
+      description: Include PASS/failure markers and every trial, including regressions. Small-demo results are not the 16 MiB benchmark.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before posting
+      options:
+        - label: I removed credentials, private datasets and confidential information from this report.
+          required: true
