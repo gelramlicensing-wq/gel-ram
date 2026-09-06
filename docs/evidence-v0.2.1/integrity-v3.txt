@@ -1,0 +1,43 @@
+GEL_DATA_INTEGRITY_V1 seed=0x47e1202609060021 cpu_only=true built_in_fixtures=synthetic
+threshold=1.0_bit_exact_for_GEL no_inference_or_quantization_speed_claim
+transport=all-binary16-patterns-including-nan input_bytes=131072 file_bytes=131136 exact_bytes=131072 byte_accuracy=1.000000000
+transport=random-u32-patterns input_bytes=4194304 file_bytes=4194368 exact_bytes=4194304 byte_accuracy=1.000000000
+transport=binary32-special-patterns input_bytes=40 file_bytes=192 exact_bytes=40 byte_accuracy=1.000000000
+fp16_reference_finite_roundtrips=63488/63488 midpoint_ties=31743/31743
+transport=uniform-fp32 input_bytes=131072 file_bytes=131136 exact_bytes=131072 byte_accuracy=1.000000000
+dataset=uniform format=GEL_FP32_bits values=32768 encoded_bytes=131072 numeric_bit_exact=32768 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=uniform-fp16 input_bytes=65536 file_bytes=65600 exact_bytes=65536 byte_accuracy=1.000000000
+dataset=uniform format=FP16_reference values=32768 encoded_bytes=65536 numeric_bit_exact=63 exact_fraction=0.001922607 rmse=1.066963654e-4 relative_l2=1.844367240e-4 max_abs_error=2.441406250e-4
+transport=uniform-q8 input_bytes=36864 file_bytes=36928 exact_bytes=36864 byte_accuracy=1.000000000
+dataset=uniform format=Q8_symmetric32_f32scale values=32768 encoded_bytes=36864 numeric_bit_exact=923 exact_fraction=0.028167725 rmse=2.176542114e-3 relative_l2=3.762398988e-3 max_abs_error=3.927469254e-3
+transport=wide_range-fp32 input_bytes=131072 file_bytes=131136 exact_bytes=131072 byte_accuracy=1.000000000
+dataset=wide_range format=GEL_FP32_bits values=32768 encoded_bytes=131072 numeric_bit_exact=32768 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=wide_range-fp16 input_bytes=65536 file_bytes=65600 exact_bytes=65536 byte_accuracy=1.000000000
+dataset=wide_range format=FP16_reference values=32768 encoded_bytes=65536 numeric_bit_exact=30 exact_fraction=0.000915527 rmse=6.218856176e-1 relative_l2=1.850572836e-4 max_abs_error=7.988281250e0
+transport=wide_range-q8 input_bytes=36864 file_bytes=36928 exact_bytes=36864 byte_accuracy=1.000000000
+dataset=wide_range format=Q8_symmetric32_f32scale values=32768 encoded_bytes=36864 numeric_bit_exact=1017 exact_fraction=0.031036377 rmse=1.975987537e1 relative_l2=5.880034457e-3 max_abs_error=1.264600372e2
+transport=block_outliers-fp32 input_bytes=131072 file_bytes=131136 exact_bytes=131072 byte_accuracy=1.000000000
+dataset=block_outliers format=GEL_FP32_bits values=32768 encoded_bytes=131072 numeric_bit_exact=32768 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=block_outliers-fp16 input_bytes=65536 file_bytes=65600 exact_bytes=65536 byte_accuracy=1.000000000
+dataset=block_outliers format=FP16_reference values=32768 encoded_bytes=65536 numeric_bit_exact=30 exact_fraction=0.000915527 rmse=1.939493157e-2 relative_l2=1.883149041e-4 max_abs_error=2.495727539e-1
+transport=block_outliers-q8 input_bytes=36864 file_bytes=36928 exact_bytes=36864 byte_accuracy=1.000000000
+dataset=block_outliers format=Q8_symmetric32_f32scale values=32768 encoded_bytes=36864 numeric_bit_exact=1021 exact_fraction=0.031158447 rmse=5.667457895e-3 relative_l2=5.502812866e-5 max_abs_error=9.999309666e-3
+transport=zeros-fp32 input_bytes=131072 file_bytes=131136 exact_bytes=131072 byte_accuracy=1.000000000
+dataset=zeros format=GEL_FP32_bits values=32768 encoded_bytes=131072 numeric_bit_exact=32768 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=zeros-fp16 input_bytes=65536 file_bytes=65600 exact_bytes=65536 byte_accuracy=1.000000000
+dataset=zeros format=FP16_reference values=32768 encoded_bytes=65536 numeric_bit_exact=32768 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=zeros-q8 input_bytes=36864 file_bytes=36928 exact_bytes=36864 byte_accuracy=1.000000000
+dataset=zeros format=Q8_symmetric32_f32scale values=32768 encoded_bytes=36864 numeric_bit_exact=16384 exact_fraction=0.500000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+external_fp32_dump_bytes=1225908 crc64=cf680585b0473140 provenance=caller_supplied_not_regenerated
+transport=external_fp32_dump-fp32 input_bytes=1224704 file_bytes=1224768 exact_bytes=1224704 byte_accuracy=1.000000000
+dataset=external_fp32_dump format=GEL_FP32_bits values=306176 encoded_bytes=1224704 numeric_bit_exact=306176 exact_fraction=1.000000000 rmse=0.000000000e0 relative_l2=0.000000000e0 max_abs_error=0.000000000e0
+transport=external_fp32_dump-fp16 input_bytes=612352 file_bytes=612416 exact_bytes=612352 byte_accuracy=1.000000000
+dataset=external_fp32_dump format=FP16_reference values=306176 encoded_bytes=612352 numeric_bit_exact=31 exact_fraction=0.000101249 rmse=7.882930071e-4 relative_l2=2.091264554e-4 max_abs_error=3.072357178e-2
+transport=external_fp32_dump-q8 input_bytes=344448 file_bytes=344512 exact_bytes=344448 byte_accuracy=1.000000000
+dataset=external_fp32_dump format=Q8_symmetric32_f32scale values=306176 encoded_bytes=344448 numeric_bit_exact=9509 exact_fraction=0.031057300 rmse=3.159602262e-2 relative_l2=8.382116999e-3 max_abs_error=4.220007360e-1
+structural_exact=262400/262400 fraction=1.000000000
+independent_ranking_queries=256/256 fraction=1.000000000
+large_store_mib=16 exact_records=131072/131072 byte_accuracy=1.000000000 default_budget=ACCEPT
+large_store_mib=256 exact_records=2097152/2097152 byte_accuracy=1.000000000 default_budget=ACCEPT
+large_store_mib=512 exact_records=4194304/4194304 byte_accuracy=1.000000000 default_budget=REJECT_explicit_budget_ACCEPT
+GEL_DATA_INTEGRITY_ALL=PASS

@@ -6,5 +6,8 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[dependencies]
+gel-core = { path = "../crates/gel-core" }
+
 [lints]
 workspace = true

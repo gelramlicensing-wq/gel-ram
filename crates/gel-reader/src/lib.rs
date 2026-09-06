@@ -5,10 +5,7 @@
 //! Reader16 judgments so coordinate changes are never miscounted as new data.
 
 use gel_core::{splitmix64, GelError, ORB_BITS, ORB_WORDS};
-use gel_kernel::{
-    contingency, progressive_xnor_bound, subspace_xnor8, xnor_matches as kernel_xnor_matches,
-    Contingency,
-};
+use gel_kernel::{contingency, subspace_xnor8, xnor_matches as kernel_xnor_matches, Contingency};
 use gel_orb::Orb1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -381,6 +378,15 @@ pub fn top_k(bank: &[Orb1024], query: &Orb1024, k: usize) -> Vec<(usize, u16)> {
 }
 
 fn insert_top_k(best: &mut Vec<(usize, u16)>, candidate: (usize, u16), k: usize) {
+    // Most candidates cannot enter a full result set. Compare the complete
+    // score/index ordering at the boundary before scanning its sorted entries.
+    if best.len() == k {
+        if let Some(&(index, score)) = best.last() {
+            if candidate.1 < score || (candidate.1 == score && candidate.0 >= index) {
+                return;
+            }
+        }
+    }
     let pos = best
         .iter()
         .position(|&(index, score)| {
@@ -407,6 +413,7 @@ pub struct ProgressiveStats {
 
 /// Exact progressive Top-K. It uses mathematically safe upper bounds after the
 /// first 32 and 64 bytes; only `upper < current kth score` is pruned.
+/// Previously inspected words are accumulated, not scored a second time.
 pub fn top_k_progressive(
     bank: &[Orb1024],
     query: &Orb1024,
@@ -428,22 +435,36 @@ pub fn top_k_progressive(
     };
     for (index, orb) in bank.iter().enumerate() {
         let threshold = if best.len() == k { best[k - 1].1 } else { 0 };
-        if best.len() == k {
-            let (_, upper32) = progressive_xnor_bound(orb, query, 4).expect("fixed valid prefix");
-            if upper32 < threshold {
+        let score = if best.len() == k {
+            let a = orb.words();
+            let b = query.words();
+            let mut mismatches = mismatch_words(&a[..4], &b[..4]);
+            if ORB_BITS as u16 - mismatches < threshold {
                 stats.rejected_after_32b += 1;
                 continue;
             }
-            let (_, upper64) = progressive_xnor_bound(orb, query, 8).expect("fixed valid prefix");
-            if upper64 < threshold {
+            mismatches += mismatch_words(&a[4..8], &b[4..8]);
+            if ORB_BITS as u16 - mismatches < threshold {
                 stats.rejected_after_64b += 1;
                 continue;
             }
-        }
+            mismatches += mismatch_words(&a[8..], &b[8..]);
+            ORB_BITS as u16 - mismatches
+        } else {
+            score_xnor(orb, query)
+        };
         stats.full_128b_scores += 1;
-        insert_top_k(&mut best, (index, score_xnor(orb, query)), k);
+        insert_top_k(&mut best, (index, score), k);
     }
     (best, stats)
+}
+
+#[inline(always)]
+fn mismatch_words(a: &[u64], b: &[u64]) -> u16 {
+    a.iter()
+        .zip(b)
+        .map(|(&x, &y)| (x ^ y).count_ones() as u16)
+        .sum()
 }
 
 #[cfg(test)]
@@ -684,5 +705,87 @@ mod tests {
                 assert!(stats.full_128b_scores <= bank.len());
             }
         }
+    }
+
+    // Independent per-bit score + full sort. Does not call the kernels,
+    // insertion routine or progressive bound under test.
+    fn bit_reference(bank: &[Orb1024], query: &Orb1024, k: usize) -> Vec<(usize, u16)> {
+        let mut scores: Vec<_> = bank
+            .iter()
+            .enumerate()
+            .map(|(index, orb)| {
+                let score = (0..1024)
+                    .filter(|&bit| {
+                        ((orb.words()[bit / 64] >> (bit % 64)) & 1)
+                            == ((query.words()[bit / 64] >> (bit % 64)) & 1)
+                    })
+                    .count() as u16;
+                (index, score)
+            })
+            .collect();
+        scores.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        scores.truncate(k);
+        scores
+    }
+
+    #[test]
+    fn top_k_matches_independent_bits_at_all_k_boundaries() {
+        for len in [0, 1, 2, 7, 33, 129] {
+            let mut bank = random_bank(len, 991);
+            if len > 2 {
+                bank[len - 1] = bank[0];
+            }
+            for query in [sample(77), sample(991), Orb1024::from_words([0; 16])] {
+                for k in [0, 1, 2, 8, 32, len, len + 1, usize::MAX] {
+                    let expected = bit_reference(&bank, &query, k);
+                    assert_eq!(top_k(&bank, &query, k), expected);
+                    let (actual, stats) = top_k_progressive(&bank, &query, k);
+                    assert_eq!(actual, expected);
+                    assert_eq!(stats.candidates, len);
+                    if k != 0 {
+                        assert_eq!(
+                            stats.rejected_after_32b
+                                + stats.rejected_after_64b
+                                + stats.full_128b_scores,
+                            len
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn progressive_strict_boundary_and_all_pruning_stages() {
+        let query = Orb1024::from_words([0; 16]);
+        // First candidate establishes threshold 768. Exactly 256 initial
+        // mismatches must NOT be pruned; its unseen bits can still tie.
+        let mut prefix = [0; 16];
+        prefix[..4].fill(u64::MAX);
+        let mut reject64 = prefix;
+        reject64[4] = 1;
+        let bank = [
+            Orb1024::from_words(prefix),
+            Orb1024::from_words(prefix),
+            Orb1024::from_words(reject64),
+            query,
+            Orb1024::from_words([u64::MAX; 16]),
+        ];
+        let (actual, stats) = top_k_progressive(&bank, &query, 1);
+        assert_eq!(actual, bit_reference(&bank, &query, 1));
+        assert_eq!(stats.rejected_after_32b, 1);
+        assert_eq!(stats.rejected_after_64b, 1);
+        assert_eq!(stats.full_128b_scores, 3);
+    }
+
+    #[test]
+    fn insertion_boundary_respects_index_even_out_of_order() {
+        let mut best = vec![(9, 1024), (10, 1000)];
+        insert_top_k(&mut best, (3, 1000), 2);
+        assert_eq!(best, vec![(9, 1024), (3, 1000)]);
+        insert_top_k(&mut best, (20, 1000), 2);
+        assert_eq!(best, vec![(9, 1024), (3, 1000)]);
+        insert_top_k(&mut best, (0, 999), 2);
+        assert_eq!(best, vec![(9, 1024), (3, 1000)]);
     }
 }

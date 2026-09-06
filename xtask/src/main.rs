@@ -31,6 +31,43 @@ const CLA_ACK_TICKED: &[&str] = &[
 const USAGE: &str =
     "verify|rust-only|licensing|ci-policy|docs-refs|cla-ack|fmt|clippy|test|bench|physics";
 const CHECKOUT_SHA: &str = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
+const PROJECT_EMAIL: &str = "gelram.licensing@gmail.com";
+
+// Distribution regression fingerprint, NOT a cryptographic authenticity check.
+fn canonical_license(bytes: &[u8]) -> bool {
+    bytes.len() == 4563 && gel_core::crc64_ecma(bytes) == 0x69c6_11a1_8474_b05b
+}
+
+// Narrow accidental-contact check, NOT a general secret or email scanner.
+// A bare domain suffix in source code is not an email address.
+fn has_nonproject_gmail(text: &str) -> bool {
+    text.split(|c: char| !(c.is_ascii_alphanumeric() || ".+-_@".contains(c)))
+        .any(|token| {
+            let token = token.trim_matches('.');
+            let Some((local, domain)) = token.rsplit_once('@') else {
+                return false;
+            };
+            !local.is_empty()
+                && domain.eq_ignore_ascii_case("gmail.com")
+                && !token.eq_ignore_ascii_case(PROJECT_EMAIL)
+        })
+}
+
+fn project_contact_privacy(root: &Path) -> Result<(), String> {
+    let mut files = Vec::new();
+    walk(root, &mut files).map_err(|e| e.to_string())?;
+    for path in files {
+        let bytes = fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if let Ok(text) = std::str::from_utf8(&bytes) {
+            if has_nonproject_gmail(text) {
+                // Do not echo a potentially private address into public CI logs.
+                return Err(format!("non-project Gmail address in {}", path.display()));
+            }
+        }
+    }
+    println!("PROJECT_CONTACT_GATE=PASS");
+    Ok(())
+}
 const FMT_CHECK_ARGS: &[&str] = &["fmt", "--all", "--", "--check"];
 const CLIPPY_ARGS: &[&str] = &[
     "clippy",
@@ -73,6 +110,7 @@ fn walk(root: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
 }
 
 fn workspace_root() -> Result<&'static Path, String> {
+    // Resolve the source checkout embedded by this build, not the caller's cwd.
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or_else(|| "missing workspace root".into())
@@ -145,6 +183,9 @@ fn licensing() -> Result<(), String> {
     let notice = read("NOTICE")?;
     let commercial = read("COMMERCIAL-LICENSE.md")?;
     let cla = read("CLA.md")?;
+    if !canonical_license(license.as_bytes()) {
+        return Err("LICENSE differs from the preserved PolyForm distribution bytes".into());
+    }
     match mode.trim() {
         "PolyForm-Noncommercial-1.0.0 + Commercial + CLA" => {
             require(
@@ -168,6 +209,7 @@ fn licensing() -> Result<(), String> {
         "COMMERCIAL-LICENSE.md",
     )?;
     require(&cla, "complete the CLA privately", "CLA.md")?;
+    project_contact_privacy(root)?;
     println!("LICENSING_GATE=PASS");
     println!("LICENSE_MODE={}", mode.trim());
     Ok(())
@@ -490,6 +532,29 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_license_rejects_changed_or_appended_bytes() {
+        let original = include_bytes!("../../LICENSE");
+        assert!(canonical_license(original));
+        let mut changed = original.to_vec();
+        changed[0] ^= 1;
+        assert!(!canonical_license(&changed));
+        changed = original.to_vec();
+        changed.push(b'\n');
+        assert!(!canonical_license(&changed));
+    }
+
+    #[test]
+    fn contact_gate_distinguishes_source_suffix_from_an_address() {
+        assert!(!has_nonproject_gmail("token.ends_with(\"@gmail.com\")"));
+        assert!(!has_nonproject_gmail(PROJECT_EMAIL));
+        assert!(!has_nonproject_gmail(&format!("<mailto:{PROJECT_EMAIL}>.")));
+        assert!(!has_nonproject_gmail(&PROJECT_EMAIL.to_uppercase()));
+        for local in ["fixture", "test.user", "test+tag", "test_user"] {
+            assert!(has_nonproject_gmail(&format!("`{local}@{}.`", "gmail.com")));
+        }
+    }
 
     #[cfg(unix)]
     #[test]
