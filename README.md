@@ -1,8 +1,71 @@
 # GEL RAM
 
-**Rust-only binary ORB memory engine.**
+**A Rust memory core for an AI knowledge bank — bit-exact binary reconstruction and reproducible hardware benchmarks.**
 
-GEL RAM v0.2.0 focuses on one narrow system problem: locate, compare, persist and structurally reconstruct fixed binary ORBs with predictable RAM cost and measurable latency.
+The goal of GEL is a knowledge bank for AI: preserving encoded knowledge and making it available for associative readout. Persistence supports that goal; it is not the purpose of the project by itself.
+
+This repository publishes a focused part of that work. GEL RAM v0.2.1 candidate locates, compares, persists and structurally reconstructs fixed binary records called **ORBs**, with predictable RAM cost and measurable latency. It is not yet a complete text-to-knowledge system: the public core does not include a knowledge encoder or an end-to-end question-answering demo.
+
+## v0.2.1 candidate: exact readout, less repeated work
+
+- Full Top-K rejects candidates that cannot enter the result set before scanning the sorted results. Progressive Top-K reuses the already counted prefix. Scores, strict pruning and index-based tie ordering are unchanged.
+- A same-binary [comparison instrument](docs/TOPK-BENCHMARK.md) retains the v0.2.0 algorithm as a control. No extra search index or private knowledge encoder is needed.
+- Default loading is bounded to 256 MiB of ORB payload; larger trusted inputs require explicit limits.
+- Generation-guarded writes verify the existing payload before replacement. Legacy v1's unprotected generation cannot authorize a monotonic write.
+- The [data-integrity audit](docs/DATA-INTEGRITY.md) independently checks exact reconstruction and ranking, and separates FP16/Q8 conversion loss from GEL transport errors.
+
+This is a **local candidate, not a published release**. Passing binary tests does not establish 99% knowledge retrieval. The experimental verified-range interface is not included.
+
+Local Ryzen AI 9 HX 370 measurements, three trials, unchanged exact results:
+
+| Full Top-32 workload | Profile | Old/new latency ratio |
+|---|---|---:|
+| 16 MiB uniform synthetic ORBs | Portable | 2.67–3.24× |
+| 16 MiB uniform synthetic ORBs | x86-64-v3 | 3.67–5.63× |
+| 509 text-derived ORBs, heldout text queries | x86-64-v3 | 1.78–2.35× |
+
+These are workload-specific CPU latency results, **not** semantic accuracy or
+a universal speedup. K=1 includes regressions. The [full validation record](docs/VALIDATION-v0.2.1.md)
+contains every planned case, raw samples, hardware settings, FP16/Q8 fidelity
+results, and the still-unmet natural-text retrieval gate.
+
+## GEL at a glance
+
+```mermaid
+flowchart TB
+    subgraph external["Outside this public release"]
+        knowledge["Knowledge and queries"] --> encoder["Knowledge encoder"]
+    end
+
+    encoder -. "Integration boundary: encoded ORBs" .-> orbs
+
+    subgraph core["Public Rust core · v0.2.1 candidate"]
+        orbs["Binary ORBs<br/>1024 bits · 128 bytes each"]
+        orbs --> readers["Compare and search<br/>Reader16 · exact Top-K"]
+        readers --> matches["Matching ORB indices and scores"]
+        orbs --> structural["Structural coding<br/>Predictor + residual, or literal"]
+        structural --> restored["Reconstructed ORB<br/>Bit-identical to the input"]
+    end
+
+    classDef outside fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+    classDef binary fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef result fill:#dcfce7,stroke:#15803d,color:#14532d;
+    class knowledge,encoder outside;
+    class orbs,readers,structural binary;
+    class matches,restored result;
+```
+
+The public-core box shows available operations; the dashed arrow marks an external integration, not a bundled end-to-end demo. Exact reconstruction refers to the **input ORB bytes**, not automatic recovery of the original knowledge or a generated answer. Persistence and hardware probes are omitted here for clarity.
+
+## What you can verify today
+
+- **Exact reconstruction:** recover the original ORB from a predictor and its residual, bit for bit; retain a literal when structural coding would cost more.
+- **Exact search over encoded ORBs:** compare full and progressive Top-K, and single-thread and multi-thread Top-1, with deterministic tie handling.
+- **Measurements on your own hardware:** run the self-test and cache/RAM probes, and inspect benchmark correctness alongside latency and memory traffic.
+
+Start with the [Quick start](#quick-start). The [measurement methodology](docs/PERFORMANCE.md) and [recorded hardware experiments](docs/SILICON-2026-09-04.md) explain how to reproduce and interpret the results.
+
+**Bit-exact reconstruction is not the same as correct knowledge retrieval.** The current synthetic benchmarks test the binary engine; they do not establish 99% semantic accuracy or a quality advantage over FP16/Q8. Those require separate, matched tests on real encoded knowledge.
 
 ## Canonical ORB
 
@@ -145,6 +208,12 @@ store remains a flat sequence of 128-byte ORBs; it does not yet persist
 structural residual records.
 
 See `docs/ARCHITECTURE.md`, `docs/FORMAT.md`, `docs/READER16.md`, `docs/STRUCTURAL-CODEC.md`, and `docs/PERFORMANCE.md`.
+
+## About the project
+
+GEL RAM is an independent hobby project. I am a hobbyist, not a professional programmer, and I use AI tools to help turn my ideas into code, investigate problems and develop tests. I guide the project's direction and decide which changes to accept.
+
+AI assistance is part of the development process, not evidence that a result is correct. The standard for this project is reproducible tests, explicit limitations and measurements on identified hardware. Independent reproduction, bug reports and constructive technical criticism are welcome.
 
 ## Licensing
 

@@ -1,0 +1,262 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running `target/v3/debug/xtask verify`
+RUST_ONLY_GATE=PASS
+PROJECT_CONTACT_GATE=PASS
+LICENSING_GATE=PASS
+LICENSE_MODE=PolyForm-Noncommercial-1.0.0 + Commercial + CLA
+CI_POLICY_GATE=PASS
+DOCS_REFS_GATE=PASS
+DOCS_REFS_CHECKED=52
+    Checking gel-reader v0.2.1 ({CHECKOUT}/crates/gel-reader)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+    Finished `release` profile [optimized] target(s) in 0.03s
+ Documenting gel-reader v0.2.1 ({CHECKOUT}/crates/gel-reader)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+   Generated {CHECKOUT}/target/v3/doc/gel_bench/index.html and 9 other files
+   Compiling gel-reader v0.2.1 ({CHECKOUT}/crates/gel-reader)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/main.rs (target/v3/debug/deps/gel_bench-22e6755e05a131fc)
+
+running 1 test
+test tests::processor_field_survives_spaces_and_parentheses_in_comm ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/v3/debug/deps/gel_cli-3965427e4cfd7870)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests examples/data_integrity.rs (target/v3/debug/examples/data_integrity-d43b2296dfa05911)
+
+running 4 tests
+test tests::external_dump_is_shape_checked_without_using_labels ... ok
+test tests::q8_reference_has_exact_integer_endpoints_and_accounts_for_scale ... ok
+test tests::external_dump_rejects_bad_shapes_nonfinite_values_and_scale_underflow ... ok
+test tests::fp16_reference_is_exact_for_all_finite_codes_and_midpoints ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_core-f01ce884c06fa050)
+
+running 5 tests
+test tests::constants_are_exact ... ok
+test tests::crc64_detects_single_bit_change ... ok
+test tests::crc64_ecma_has_canonical_check_value ... ok
+test tests::legacy_checksum_contract_is_preserved ... ok
+test tests::incremental_crc_matches_one_shot ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_kernel-0876fb7b3be4fc21)
+
+running 5 tests
+test tests::backend_describes_compile_time_features ... ok
+test tests::contingency_partitions_all_1024_bits ... ok
+test tests::subspaces_sum_to_global_matches ... ok
+test tests::progressive_bound_never_excludes_exact_score ... ok
+test tests::kernel_matches_reference ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_orb-a6cadb2ef92d590a)
+
+running 4 tests
+test tests::bit_access_is_checked_and_reversible ... ok
+test tests::exact_byte_roundtrip ... ok
+test tests::similarity_endpoints ... ok
+test tests::wrong_byte_lengths_are_rejected ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/v3/debug/deps/gel_physics-7e6b5c8cb4dbec7f)
+
+running 5 tests
+test tests::percentile_uses_sorted_upper_rank ... ok
+test tests::lane_reduce_matches_lane_model ... ok
+test tests::probe_buffers_are_64_byte_aligned ... ok
+test tests::processor_field_survives_spaces_and_parentheses_in_comm ... ok
+test tests::tiny_physics_probes_produce_finite_positive_values ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_reader-431c32fca2d63622)
+
+running 15 tests
+test tests::chunk_bounds_partition_the_bank_in_order ... ok
+test tests::insertion_boundary_respects_index_even_out_of_order ... ok
+test tests::all_public_geometries_are_exactly_invertible ... ok
+test tests::coordinate_geometries_preserve_xnor_when_applied_to_both_sides ... ok
+test tests::reader16_exposes_local_and_asymmetric_judgments ... ok
+test tests::progressive_strict_boundary_and_all_pruning_stages ... ok
+test tests::top1_finds_exact_query ... ok
+test tests::top_k_is_deterministic_on_ties ... ok
+test tests::thread_counts_above_machine_budget_fall_back_to_top1 ... ok
+test tests::progressive_top_k_is_exactly_equal_to_full_top_k ... ok
+test tests::oversized_thread_counts_equal_top1_without_spawning ... ok
+test tests::top1_threads_equals_top1_for_random_banks ... ok
+test tests::top_k_matches_independent_bits_at_all_k_boundaries ... ok
+test tests::top1_threads_finds_winner_exactly_at_chunk_boundaries ... ok
+test tests::top1_threads_tie_resolves_to_lowest_index ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running unittests examples/topk_compare.rs (target/v3/debug/examples/topk_compare-f188a4a68dc688c2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_store-18376a5b49940b13)
+
+running 22 tests
+test tests::default_budget_rejects_oversized_sparse_file_before_read_or_allocation ... ok
+test tests::v2_header_is_exactly_64_bytes_and_self_protected ... ok
+test tests::oversized_record_count_is_rejected_before_allocation ... ok
+test tests::v2_nonzero_flags_are_rejected_before_crc ... ok
+test tests::corrupt_v2_cannot_supply_generation_or_be_silently_overwritten ... ok
+test tests::verify_file_reports_legacy_v1_while_providing_upgrade_header ... ok
+test tests::verify_file_agrees_with_open_verified_and_rejects_corruption ... ok
+test tests::legacy_v1_nonzero_reserved_bytes_are_rejected ... ok
+test tests::every_single_header_bit_flip_is_rejected ... ok
+test tests::configured_open_limits_fail_before_large_allocation ... ok
+test tests::every_truncation_length_is_rejected ... ok
+test tests::record_budget_boundary_and_explicit_unbounded_are_preserved ... ok
+test tests::malformed_lengths_and_trailing_bytes_are_rejected ... ok
+test tests::persistence_roundtrip_and_payload_corruption_rejection ... ok
+test tests::legacy_v1_store_is_verified_and_migrates_to_v2_on_write ... ok
+test tests::atomic_write_is_private_by_default_and_preserves_existing_mode ... ok
+test tests::legacy_v1_header_single_bit_sweep_freezes_detection_boundary ... ok
+test tests::legacy_generation_is_discarded_and_never_authorizes_publication ... ok
+test tests::generation_rollback_and_equal_generation_are_rejected ... ok
+test tests::random_headers_are_rejected_and_never_panic ... ok
+test tests::every_payload_byte_flip_is_rejected ... ok
+test tests::every_double_header_bit_flip_is_rejected ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running unittests src/lib.rs (target/v3/debug/deps/gel_structural-a551dbdc0720d0d2)
+
+running 11 tests
+test tests::delta_depth_is_hard_bounded ... ok
+test tests::best_prototype_selects_correlated_parent_and_decodes_exactly ... ok
+test tests::full_record_break_even_includes_parent_metadata ... ok
+test tests::measured_sparse_dense_break_even_is_100_bits ... ok
+test tests::sparse_padding_bit_set_is_rejected ... ok
+test tests::sparse_count_and_packed_length_mismatch_is_rejected ... ok
+test tests::sparse_position_at_or_above_1024_is_rejected ... ok
+test tests::random_data_falls_back_to_literal_when_delta_is_not_smaller ... ok
+test tests::sparse_positions_must_be_strictly_increasing ... ok
+test tests::sparse_truncated_packed_positions_are_rejected ... ok
+test tests::exact_xor_roundtrip_is_bit_identical ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/v3/debug/deps/xtask-8a5eb1d99d8f841a)
+
+running 7 tests
+test tests::cla_ack_needles_match_the_template_line ... ok
+test tests::code_spans_follow_backtick_run_width ... ok
+test tests::contact_gate_distinguishes_source_suffix_from_an_address ... ok
+test tests::fenced_blocks_are_not_scanned ... ok
+test tests::reference_shape_matches_repository_paths_only ... ok
+test tests::rust_only_gate_rejects_symlinks_and_executable_files ... ok
+test tests::canonical_license_rejects_changed_or_appended_bytes ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running `target/v3/release/gel-cli selftest`
+GEL_SELFTEST_V2=PASS
+ORB_BITS=1024
+ORB_BYTES=128
+VIEW_ROUNDTRIPS=6/6
+READER16=PASS
+PROGRESSIVE_EXACT=PASS
+STRUCTURAL_EXACT=PASS
+STRUCTURAL_DER_LOCAL=5.120000
+PERSISTENCE_V2_CRC64=PASS
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running `target/v3/release/gel-bench 8192 3 2`
+GEL_BENCH_V3
+generator=splitmix64_with_unique_word0
+generator_seed=5135594514081467971
+bank_crc64_ecma=6f038d6db5b8839f
+orbs=8192
+bank_bytes=1048576
+orb_bytes=128
+rounds=3
+warmup_rounds=1
+query_schedule=varying-exact-self-stride-65537
+threads=2
+thread_scan=exact_merge_lowest_index_tie
+thread_scan_exact=PASS
+backend=count_ones(popcnt=true,avx2=true)
+target_arch=x86_64
+observed_cpu_start=0
+scanned_orbs=24576
+elapsed_ns=294444
+query_p50_ns=76524
+query_p95_ns=148850
+query_p99_ns=148850
+orbs_per_sec=83465786.363
+effective_gib_per_sec=9.949897
+top1_exact=3/3
+progressive_top8_exact=PASS
+progressive_candidates=8192
+progressive_reject_32b=0
+progressive_reject_64b=0
+progressive_full_128b=8192
+quality_flips_1=target:4096,hit:4096,score:1023,survived:true
+quality_flips_8=target:4096,hit:4096,score:1016,survived:true
+quality_flips_32=target:4096,hit:4096,score:992,survived:true
+quality_flips_64=target:4096,hit:4096,score:960,survived:true
+quality_flips_128=target:4096,hit:4096,score:896,survived:true
+quality_flips_256=target:4096,hit:4096,score:768,survived:true
+quality_flips_384=target:4096,hit:4096,score:640,survived:true
+null_top1_index=3916
+null_top1_score=565
+observed_cpu_end=2
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running `target/v3/release/gel-bench 8192 3 1`
+GEL_BENCH_V3
+generator=splitmix64_with_unique_word0
+generator_seed=5135594514081467971
+bank_crc64_ecma=6f038d6db5b8839f
+orbs=8192
+bank_bytes=1048576
+orb_bytes=128
+rounds=3
+warmup_rounds=1
+query_schedule=varying-exact-self-stride-65537
+threads=1
+thread_scan=single
+thread_scan_exact=SINGLE
+backend=count_ones(popcnt=true,avx2=true)
+target_arch=x86_64
+observed_cpu_start=0
+scanned_orbs=24576
+elapsed_ns=86492
+query_p50_ns=30197
+query_p95_ns=35868
+query_p99_ns=35868
+orbs_per_sec=284141885.955
+effective_gib_per_sec=33.872352
+top1_exact=3/3
+progressive_top8_exact=PASS
+progressive_candidates=8192
+progressive_reject_32b=0
+progressive_reject_64b=0
+progressive_full_128b=8192
+quality_flips_1=target:4096,hit:4096,score:1023,survived:true
+quality_flips_8=target:4096,hit:4096,score:1016,survived:true
+quality_flips_32=target:4096,hit:4096,score:992,survived:true
+quality_flips_64=target:4096,hit:4096,score:960,survived:true
+quality_flips_128=target:4096,hit:4096,score:896,survived:true
+quality_flips_256=target:4096,hit:4096,score:768,survived:true
+quality_flips_384=target:4096,hit:4096,score:640,survived:true
+null_top1_index=3916
+null_top1_score=565
+observed_cpu_end=3
+GEL_VERIFY_ALL=PASS

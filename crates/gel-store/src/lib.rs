@@ -18,6 +18,9 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 pub const HEADER_BYTES: usize = 64;
 pub const V2_HEADER_CRC_OFFSET: usize = 48;
+pub const DEFAULT_MAX_PAYLOAD_BYTES: u64 = 256 * 1024 * 1024;
+pub const DEFAULT_MAX_RECORDS: u64 = DEFAULT_MAX_PAYLOAD_BYTES / ORB_BYTES as u64;
+pub const DEFAULT_MAX_FILE_BYTES: u64 = HEADER_BYTES as u64 + DEFAULT_MAX_PAYLOAD_BYTES;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StoreFormat {
@@ -146,6 +149,13 @@ pub struct OpenLimits {
 }
 
 impl OpenLimits {
+    /// Default allocation budget: at most 256 MiB of ORB payload.
+    pub const SAFE_DEFAULT: Self = Self {
+        max_records: DEFAULT_MAX_RECORDS,
+        max_file_bytes: DEFAULT_MAX_FILE_BYTES,
+    };
+
+    /// Explicit trusted-input opt-in; format and integrity checks still apply.
     pub const UNLIMITED: Self = Self {
         max_records: u64::MAX,
         max_file_bytes: u64::MAX,
@@ -209,7 +219,13 @@ impl RamStore {
         self.write_atomic(path)
     }
 
+    /// Loads at most 256 MiB of payload. Use explicit limits for larger stores.
     pub fn open_verified(path: impl AsRef<Path>) -> Result<Self, GelError> {
+        Self::open_verified_with_limits(path, OpenLimits::SAFE_DEFAULT)
+    }
+
+    /// Loads a trusted-size file without an allocation budget.
+    pub fn open_verified_unbounded(path: impl AsRef<Path>) -> Result<Self, GelError> {
         Self::open_verified_with_limits(path, OpenLimits::UNLIMITED)
     }
 
@@ -277,7 +293,6 @@ enum PayloadCheck {
     },
     V1 {
         record_count: u64,
-        generation: Generation,
         expected_checksum: u64,
         checksum: Checksum64,
         crc: Crc64Ecma,
@@ -318,7 +333,6 @@ impl PayloadCheck {
             }
             Self::V1 {
                 record_count,
-                generation,
                 expected_checksum,
                 checksum,
                 crc,
@@ -328,7 +342,9 @@ impl PayloadCheck {
                 }
                 Ok(Verification {
                     source_format: StoreFormat::LegacyV1,
-                    header: Header::new(record_count, generation, crc.finish()),
+                    // v1 does not checksum its generation. Never promote
+                    // unprotected metadata into trusted monotonic state.
+                    header: Header::new(record_count, Generation(0), crc.finish()),
                 })
             }
         }
@@ -382,7 +398,6 @@ fn parse_v1_header(header_bytes: &[u8; HEADER_BYTES]) -> Result<PayloadCheck, Ge
     }
     Ok(PayloadCheck::V1 {
         record_count: le_u64(header_bytes, 24),
-        generation: Generation(le_u64(header_bytes, 32)),
         expected_checksum: le_u64(header_bytes, 40),
         checksum: Checksum64::new(),
         crc: Crc64Ecma::new(),
@@ -453,18 +468,12 @@ fn sync_parent_dir(_path: &Path) -> Result<(), GelError> {
 }
 
 fn read_generation(path: &Path) -> Result<Generation, GelError> {
-    let mut file = File::open(path)?;
-    let mut bytes = [0u8; HEADER_BYTES];
-    file.read_exact(&mut bytes)?;
-    if bytes[0..8] == GEL_MAGIC_V2 {
-        Ok(Header::decode(&bytes)?.generation)
-    } else if bytes[0..8] == GEL_MAGIC_V1 {
-        if le_u32(&bytes, 8) != 1 {
-            return Err(GelError::UnsupportedVersion(le_u32(&bytes, 8)));
-        }
-        Ok(Generation(le_u64(&bytes, 32)))
-    } else {
-        Err(GelError::InvalidMagic)
+    // Streaming validation uses constant memory even for large files.
+    // The caller's single-writer contract excludes concurrent mutation.
+    let verification = verify_file(path, OpenLimits::UNLIMITED)?;
+    match verification.source_format {
+        StoreFormat::V2 => Ok(verification.header.generation),
+        StoreFormat::LegacyV1 => Err(GelError::LegacyGenerationUntrusted),
     }
 }
 
@@ -648,6 +657,115 @@ mod tests {
     }
 
     #[test]
+    fn default_budget_rejects_oversized_sparse_file_before_read_or_allocation() {
+        let path = path("default-budget");
+        let file = File::create(&path).unwrap();
+        file.set_len(DEFAULT_MAX_FILE_BYTES + 1).unwrap();
+        drop(file);
+        assert_eq!(DEFAULT_MAX_RECORDS, 2_097_152);
+        assert!(matches!(
+            RamStore::open_verified(&path),
+            Err(GelError::LimitExceeded("file bytes"))
+        ));
+        assert!(matches!(
+            verify_file(&path, OpenLimits::SAFE_DEFAULT),
+            Err(GelError::LimitExceeded("file bytes"))
+        ));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn record_budget_boundary_and_explicit_unbounded_are_preserved() {
+        assert!(validate_count_and_size(
+            DEFAULT_MAX_RECORDS,
+            DEFAULT_MAX_FILE_BYTES,
+            OpenLimits::SAFE_DEFAULT
+        )
+        .is_ok());
+        assert!(matches!(
+            validate_count_and_size(
+                DEFAULT_MAX_RECORDS + 1,
+                DEFAULT_MAX_FILE_BYTES + ORB_BYTES as u64,
+                OpenLimits::SAFE_DEFAULT
+            ),
+            Err(GelError::LimitExceeded("record count"))
+        ));
+        let path = path("unbounded");
+        RamStore::from_orbs(vec![orb(7)], Generation(1))
+            .write_atomic(&path)
+            .unwrap();
+        assert_eq!(
+            RamStore::open_verified_unbounded(&path).unwrap().orbs(),
+            &[orb(7)]
+        );
+        assert!(matches!(
+            RamStore::open_verified_with_limits(
+                &path,
+                OpenLimits {
+                    max_records: 0,
+                    max_file_bytes: u64::MAX
+                }
+            ),
+            Err(GelError::LimitExceeded("record count"))
+        ));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn corrupt_v2_cannot_supply_generation_or_be_silently_overwritten() {
+        let path = path("corrupt-generation");
+        let original = v2_file_bytes(&[orb(1), orb(2)], 5);
+        let replacement = RamStore::from_orbs(vec![orb(3)], Generation(6));
+        let mut payload_flip = original.clone();
+        payload_flip[HEADER_BYTES] ^= 1;
+        let mut header_flip = original.clone();
+        header_flip[32] ^= 1;
+        let mut trailing = original.clone();
+        trailing.push(0);
+        for damaged in [
+            payload_flip,
+            header_flip,
+            trailing,
+            original[..HEADER_BYTES].to_vec(),
+        ] {
+            fs::write(&path, &damaged).unwrap();
+            assert!(replacement.write_if_newer(&path).is_err());
+            assert_eq!(fs::read(&path).unwrap(), damaged);
+        }
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn legacy_generation_is_discarded_and_never_authorizes_publication() {
+        let path = path("legacy-generation");
+        for generation in [0, 1, 77, u64::MAX] {
+            let bytes = legacy_v1_file_bytes(&[orb(9)], generation);
+            fs::write(&path, &bytes).unwrap();
+            let loaded = RamStore::open_verified(&path).unwrap();
+            assert_eq!(loaded.header().generation, Generation(0));
+            assert_eq!(loaded.orbs(), &[orb(9)]);
+            assert_eq!(
+                RamStore::from_orbs(vec![orb(10)], Generation(u64::MAX)).write_if_newer(&path),
+                Err(GelError::LegacyGenerationUntrusted)
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+        // Explicit migration, then normal monotonic state, remains available.
+        RamStore::open_verified(&path)
+            .unwrap()
+            .write_atomic(&path)
+            .unwrap();
+        RamStore::from_orbs(vec![orb(10)], Generation(1))
+            .write_if_newer(&path)
+            .unwrap();
+        assert_eq!(
+            RamStore::open_verified(&path).unwrap().header().generation,
+            Generation(1)
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn malformed_lengths_and_trailing_bytes_are_rejected() {
         let base = path("invalid");
         RamStore::from_orbs(vec![orb(1)], Generation(11))
@@ -695,7 +813,7 @@ mod tests {
         assert_eq!(reopened.orbs(), records);
         assert_eq!(reopened.source_format(), StoreFormat::LegacyV1);
         assert_eq!(reopened.header().version, 2);
-        assert_eq!(reopened.header().generation, Generation(77));
+        assert_eq!(reopened.header().generation, Generation(0));
         reopened.write_atomic(&migrated).unwrap();
         let migrated_bytes = fs::read(&migrated).unwrap();
         assert_eq!(&migrated_bytes[..8], &GEL_MAGIC_V2);
@@ -730,14 +848,14 @@ mod tests {
         let overflow = path("count-overflow");
         fs::write(&overflow, Header::new(u64::MAX, Generation(1), 0).encode()).unwrap();
         assert!(matches!(
-            RamStore::open_verified(&overflow),
+            RamStore::open_verified_unbounded(&overflow),
             Err(GelError::InvalidHeader("payload size overflow"))
         ));
         let _ = fs::remove_file(overflow);
 
         let huge = path("count-huge");
         fs::write(&huge, Header::new(1 << 40, Generation(1), 0).encode()).unwrap();
-        match RamStore::open_verified(&huge) {
+        match RamStore::open_verified_unbounded(&huge) {
             Err(GelError::InvalidLength { expected, actual }) => {
                 assert_eq!(actual, HEADER_BYTES);
                 assert_eq!(
@@ -823,7 +941,7 @@ mod tests {
     /// equal headers on success and equal error text on failure.
     fn assert_same_verdict(path: &Path) -> Result<Verification, GelError> {
         let streamed = verify_file(path, OpenLimits::UNLIMITED);
-        let loaded = RamStore::open_verified(path);
+        let loaded = RamStore::open_verified_unbounded(path);
         match (&streamed, &loaded) {
             (Ok(verification), Ok(store)) => {
                 assert_eq!(verification.header, store.header());
@@ -892,7 +1010,7 @@ mod tests {
         assert_eq!(verification.source_format.version(), 1);
         assert_eq!(verification.header.version, 2);
         assert_eq!(verification.header.record_count, 2);
-        assert_eq!(verification.header.generation, Generation(77));
+        assert_eq!(verification.header.generation, Generation(0));
         assert_eq!(
             verification.header.payload_crc64,
             crc64_ecma(&original[HEADER_BYTES..])
@@ -1044,15 +1162,12 @@ mod tests {
                     }
                     detected += 1;
                 }
-                // generation: v1 has no header authentication, so the store
-                // opens with the mutated generation. Documented negative.
+                // v1 cannot detect this mutation, but v0.2.1 discards the
+                // unprotected generation instead of trusting it.
                 32..=39 => {
                     let verification = result.unwrap_or_else(|e| panic!("bit {bit}: {e}"));
                     assert_eq!(verification.source_format, StoreFormat::LegacyV1);
-                    assert_eq!(
-                        verification.header.generation.0,
-                        GENERATION ^ (1u64 << (bit - 256))
-                    );
+                    assert_eq!(verification.header.generation.0, 0);
                     assert_eq!(verification.header.record_count, 2);
                     undetected += 1;
                 }

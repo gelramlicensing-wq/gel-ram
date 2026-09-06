@@ -31,6 +31,7 @@ pub enum GelError {
     InvalidView(&'static str),
     InvalidResidual(&'static str),
     GenerationRollback { current: u64, attempted: u64 },
+    LegacyGenerationUntrusted,
     LimitExceeded(&'static str),
     Io(String),
 }
@@ -54,6 +55,7 @@ impl fmt::Display for GelError {
                 "generation rollback rejected: current={current}, attempted={attempted}"
             ),
             Self::LimitExceeded(msg) => write!(f, "configured GEL open limit exceeded: {msg}"),
+            Self::LegacyGenerationUntrusted => write!(f, "legacy v1 generation is unprotected; migrate explicitly before monotonic publication"),
             Self::Io(msg) => write!(f, "I/O error: {msg}"),
         }
     }

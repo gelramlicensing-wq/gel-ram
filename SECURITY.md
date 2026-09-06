@@ -16,13 +16,16 @@ Fixes, when made, land only on the current 0.2.x line. No fix, response time or 
 
 Treat `.gel` files as untrusted input. The parser validates magic, version, fixed dimensions, flags, reserved bytes, arithmetic overflow, exact file length and payload checksum before exposing ORBs. Version 2 additionally validates a CRC64-ECMA-protected header before exposing its metadata.
 
-The reader reserves memory for the declared record count without first duplicating the complete payload. Allocation failure is returned as an error. Applications should use `open_verified_with_limits` with a record and file-size budget appropriate to their environment.
+The reader reserves memory for the declared record count without first duplicating the complete payload. Allocation failure is returned as an error. Since v0.2.1, `open_verified` defaults to a 256 MiB payload budget. Applications should use `open_verified_with_limits` with a record and file-size budget appropriate to their environment; explicit unbounded loading is for trusted-size input.
 
 Version 2 uses separate CRC64-ECMA fields for the complete header and payload. Legacy v1 protects only its payload and cannot retroactively authenticate historical header metadata. CRC is not a MAC, signature or cryptographic content identifier. Files crossing a trust boundary require an external cryptographic authentication layer.
 
 The verification report distinguishes the actual on-disk source format from
 the protected v2 header prepared for a later migration write. A legacy v1 file
 is never displayed as if its original header had v2 authentication.
+In v0.2.1 the unprotected v1 generation is discarded on migration, and v1
+cannot authorize a generation-guarded replacement. `write_if_newer` validates
+the predecessor's full v2 integrity; its single-writer assumption still applies.
 
 ## Hardening in place
 
